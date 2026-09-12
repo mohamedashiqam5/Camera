@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Live Camera</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:650px;margin:0 auto;padding:24px}
+button{font-size:18px;padding:14px 18px;margin:8px 0;width:100%}
+video{width:100%;background:#000;border-radius:12px;margin-top:12px}
+.card{padding:16px;border:1px solid #ddd;border-radius:14px;margin:12px 0}
+.small{font-size:14px;color:#666}
+</style>
+</head>
+<body>
+<h2>Live Camera</h2>
+<div class="card">
+<p><b>Use the same link on both phones.</b></p>
+<p class="small">On the Android phone, tap Camera. On your iPhone, tap Viewer. Camera access starts only after the Android user grants browser permission.</p>
+<button onclick="location.href='camera.html'+location.search">📷 Start Camera</button>
+<button onclick="location.href='viewer.html'+location.search">▶️ Watch Live</button>
+</div>
+</body>
+</html>
