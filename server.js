@@ -12,12 +12,19 @@ const wss = new WebSocketServer({ server });
 
 const rooms = new Map();
 
-// Serve files from /public
-app.use(express.static(path.join(__dirname, "public")));
-
 // Home page
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+  res.sendFile(path.join(__dirname, "index.html"));
+});
+
+// Camera page
+app.get("/camera.html", (req, res) => {
+  res.sendFile(path.join(__dirname, "camera.html"));
+});
+
+// Viewer page
+app.get("/viewer.html", (req, res) => {
+  res.sendFile(path.join(__dirname, "viewer.html"));
 });
 
 // Health check
