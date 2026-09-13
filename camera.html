@@ -3,54 +3,281 @@
 <head>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Camera</title>
-<style>body{font-family:system-ui;padding:20px}button{font-size:18px;padding:14px;width:100%}video{width:100%;background:#000;border-radius:12px;margin-top:12px}.ok{color:green}</style>
+
+<style>
+body{
+  font-family:system-ui;
+  padding:20px;
+}
+button{
+  font-size:18px;
+  padding:14px;
+  width:100%;
+}
+video{
+  width:100%;
+  background:#000;
+  border-radius:12px;
+  margin-top:12px;
+}
+.ok{
+  color:green;
+}
+</style>
 </head>
+
 <body>
+
 <h2>Camera</h2>
-<p>Tap the button, then choose <b>Allow</b> for camera and microphone.</p>
-<button id="start">Allow Camera & Microphone</button>
+
+<p>
+Tap the button, then choose <b>Allow</b> for camera and microphone.
+</p>
+
+<button id="start">
+Allow Camera & Microphone
+</button>
+
 <video id="preview" autoplay playsinline muted></video>
+
 <p id="status"></p>
+
 <script>
-const room = new URLSearchParams(location.search).get("room") || "demo";
-let ws, pc, stream;
-const status = m => document.getElementById("status").textContent=m;
+
+const room =
+  new URLSearchParams(location.search).get("room") || "demo";
+
+let ws;
+let pc;
+let stream;
+
+const status = m => {
+  document.getElementById("status").textContent = m;
+};
+
+
+/* =========================================
+   PREVENT ANDROID BACK FROM LEAVING CAMERA
+   ========================================= */
+
+history.pushState({cameraPage:true}, "", location.href);
+
+window.addEventListener("popstate", () => {
+
+  // Immediately put the camera page back in history
+  history.pushState({cameraPage:true}, "", location.href);
+
+  status("Camera is still active. Live video continues.");
+});
+
+
+/* =========================================
+   WEBSOCKET CONNECTION
+   ========================================= */
 
 function connect(){
-  const proto=location.protocol==="https:"?"wss":"ws";
-  ws=new WebSocket(`${proto}://${location.host}`);
-  ws.onopen=()=>ws.send(JSON.stringify({type:"join",room}));
-  ws.onmessage=async e=>{
-    const m=JSON.parse(e.data);
-    if(m.type==="viewer-ready" || m.type==="peer-joined"){
-      await makeOffer();
-    } else if(m.type==="answer"){
-      await pc.setRemoteDescription(m.answer);
-    } else if(m.type==="ice" && pc){
-      try{await pc.addIceCandidate(m.candidate)}catch{}
-    }
+
+  const proto =
+    location.protocol === "https:" ? "wss" : "ws";
+
+  ws = new WebSocket(
+    `${proto}://${location.host}`
+  );
+
+  ws.onopen = () => {
+
+    status("Camera active. Live connection connected.");
+
+    ws.send(JSON.stringify({
+      type:"join",
+      room
+    }));
   };
+
+
+  ws.onmessage = async e => {
+
+    const m = JSON.parse(e.data);
+
+    if(
+      m.type === "viewer-ready" ||
+      m.type === "peer-joined"
+    ){
+
+      await makeOffer();
+
+    }
+
+    else if(m.type === "answer"){
+
+      if(pc){
+        await pc.setRemoteDescription(m.answer);
+      }
+
+    }
+
+    else if(m.type === "ice" && pc){
+
+      try{
+        await pc.addIceCandidate(m.candidate);
+      }catch{}
+
+    }
+
+  };
+
+
+  ws.onclose = () => {
+
+    status("Connection interrupted. Reconnecting...");
+
+    setTimeout(() => {
+
+      if(
+        stream &&
+        (!ws || ws.readyState !== WebSocket.OPEN)
+      ){
+        connect();
+      }
+
+    }, 2000);
+
+  };
+
 }
+
+
+/* =========================================
+   WEBRTC OFFER
+   ========================================= */
+
 async function makeOffer(){
+
   if(!stream) return;
-  if(pc) pc.close();
-  pc=new RTCPeerConnection({
-    iceServers:[{urls:"stun:stun.l.google.com:19302"}]
+
+  if(pc){
+    pc.close();
+  }
+
+  pc = new RTCPeerConnection({
+
+    iceServers:[
+      {
+        urls:"stun:stun.l.google.com:19302"
+      }
+    ]
+
   });
-  stream.getTracks().forEach(t=>pc.addTrack(t,stream));
-  pc.onicecandidate=e=>{if(e.candidate)ws.send(JSON.stringify({type:"ice",candidate:e.candidate}))};
-  const offer=await pc.createOffer();
+
+
+  stream.getTracks().forEach(track => {
+
+    pc.addTrack(track, stream);
+
+  });
+
+
+  pc.onicecandidate = e => {
+
+    if(
+      e.candidate &&
+      ws &&
+      ws.readyState === WebSocket.OPEN
+    ){
+
+      ws.send(JSON.stringify({
+        type:"ice",
+        candidate:e.candidate
+      }));
+
+    }
+
+  };
+
+
+  pc.onconnectionstatechange = () => {
+
+    if(
+      pc.connectionState === "connected"
+    ){
+
+      status("🔴 Camera is LIVE");
+
+    }
+
+    if(
+      pc.connectionState === "disconnected" ||
+      pc.connectionState === "failed"
+    ){
+
+      status("Reconnecting live video...");
+
+    }
+
+  };
+
+
+  const offer = await pc.createOffer();
+
   await pc.setLocalDescription(offer);
-  ws.send(JSON.stringify({type:"offer",offer:pc.localDescription}));
+
+
+  if(
+    ws &&
+    ws.readyState === WebSocket.OPEN
+  ){
+
+    ws.send(JSON.stringify({
+      type:"offer",
+      offer:pc.localDescription
+    }));
+
+  }
+
 }
-document.getElementById("start").onclick=async()=>{
+
+
+/* =========================================
+   START CAMERA
+   ========================================= */
+
+document.getElementById("start").onclick =
+async () => {
+
   try{
-    stream=await navigator.mediaDevices.getUserMedia({video:true,audio:true});
-    document.getElementById("preview").srcObject=stream;
-    status("Camera is active. Keep this page open.");
+
+    stream =
+      await navigator.mediaDevices.getUserMedia({
+        video:true,
+        audio:true
+      });
+
+
+    document.getElementById("preview").srcObject =
+      stream;
+
+
+    status(
+      "🔴 Camera is active. You can use Back; this page will stay open."
+    );
+
+
     connect();
-  }catch(e){status("Camera/microphone permission was denied or unavailable: "+e.message)}
+
+  }
+
+  catch(e){
+
+    status(
+      "Camera/microphone permission was denied or unavailable: "
+      + e.message
+    );
+
+  }
+
 };
+
 </script>
+
 </body>
 </html>
